@@ -29,6 +29,10 @@ mount -t tmpfs tmpfs tmp/
 mount -t tmpfs tmpfs run/
 mount -t tmpfs tmpfs var/volatile/
 mount --bind /home home/
+if [ -d /home/root/.entware ]; then
+  mkdir -p opt
+  mount --bind /home/root/.entware opt
+fi
 
 rsync -a /bin/. bin/
 rsync -a /lib/. lib/
@@ -37,8 +41,15 @@ rsync -a /usr/lib/. usr/lib/
 cp /etc/resolv.conf etc/resolv.conf
 rsync -avh --devices --specials /run/systemd/resolve run/systemd/
 
-cd ~
-exec chroot /home/root/.local/share/sysroot bash -l
+chroot . bash -l
+umount proc/
+umount sys/
+umount dev/
+umount tmp/
+umount run/
+umount var/volatile/
+umount home/
+umount opt/
 EOF
 
 cat <<EOF > "$exclude_path"
@@ -102,6 +113,6 @@ mkdir-p /home/root/.local/bin
 
 rsync-in rsync://root@${IP}:${PORT}/sysroot /home/root/.local/share/sysroot archive:true
 upload ${script_path} /home/root/.local/bin/sysfs_chroot
-write-append /home/root/.bashrc "! systemd-detect-virt -r && [ -e .local/bin/sysfs_chroot ] && .local/bin/sysfs_chroot"
+write-append /home/root/.bashrc "PATH=$PATH:~/.local/bin"
 write-append /home/root/.bashrc ""
 GFS
