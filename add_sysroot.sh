@@ -42,14 +42,8 @@ cp /etc/resolv.conf etc/resolv.conf
 rsync -avh --devices --specials /run/systemd/resolve run/systemd/
 
 chroot . bash -l
-umount proc/
-umount sys/
-umount dev/
-umount tmp/
-umount run/
-umount var/volatile/
-umount home/
-umount opt/
+
+grep /home/root/.local/share/sysroot /proc/mounts | cut -d' ' -f2 | xargs -r umount -l
 EOF
 
 cat <<EOF > "$exclude_path"
