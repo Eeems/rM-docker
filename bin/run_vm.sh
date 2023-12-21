@@ -21,6 +21,7 @@ qemu-system-arm \
     -append "console=ttymxc0 rootfstype=ext4 root=/dev/mmcblk1p2 rw rootwait init=/sbin/init" \
     -nic user,hostfwd=tcp::22-:22,hostfwd=tcp::8888-:8888 \
     -monitor tcp::5555,server=on,wait=off \
-    -parallel null -display none \
+    -parallel null \
+    -display none \
     $LOAD_STATE \
     "$@"

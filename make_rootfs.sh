@@ -33,5 +33,9 @@ upload /tmp/dhcpcd.service /lib/systemd/system/dhcpcd.service
 mount /dev/sda4 /home
 cp-a /etc/skel /home/root
 
+ln-s /dev/null /etc/systemd/system/remarkable-fail.service
+ln-s /dev/null /etc/systemd/system/xochitl.service
+ln-s /dev/null /etc/systemd/system/wacom_flash.service
+ln-s /dev/null /etc/systemd/system/update-engine.service
 GFS
 

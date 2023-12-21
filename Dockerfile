@@ -4,6 +4,8 @@ ARG toltec_image=ghcr.io/toltec-dev/base:v3.1
 ARG rm2_stuff_commit=2f6c56ea6e3495ced46449a59e6af6848c73562
 ARG fw_version=3.5.2.1807
 ARG linux_release=5.8.18
+ARG toolchain=/opt/codex/rm11x/3.1.15
+ARG sysroot=cortexa7hf-neon-remarkable-linux-gnueabi
 
 # Step 1: Build Linux for the emulator
 FROM $toltec_image as linux-build
@@ -18,6 +20,7 @@ RUN <<EOT
         lzop \
         libssl-dev \
         flex
+    apt-get clean
     rm -rf /var/lib/apt/lists/*
 EOT
 
@@ -73,6 +76,7 @@ RUN <<EOT
         git \
         python3 \
         python3-protobuf
+    apt-get clean
     rm -rf /var/lib/apt/lists/*
     chmod +x /usr/local/bin/jq
 EOT
@@ -95,13 +99,14 @@ RUN <<EOT
 EOT
 
 # Step3: Qemu!
-FROM debian:bookworm AS qemu-base
+FROM debian:bookworm AS qemu-base-noroot
 
 RUN <<EOT
     set -ex
     export DEBIAN_FRONTEND="noninteractive"
     apt-get update
     apt-get install --no-install-recommends -y qemu-system-arm qemu-utils ssh netcat-openbsd
+    apt-get clean
     rm -rf /var/lib/apt/lists/*
 EOT
 
@@ -109,20 +114,9 @@ RUN mkdir -p /opt/root
 
 COPY --from=linux-build /opt/zImage /opt
 COPY --from=linux-build /opt/imx7d-rm.dtb /opt
-COPY --from=rootfs /opt/rootfs.qcow2 /opt/root
 
 ADD bin /opt/bin
 ENV PATH=/opt/bin:$PATH
-
-# First boot, disable xochitl and reboot service, and save state
-RUN <<EOT
-    set -ex
-    run_vm.sh -serial null -daemonize
-    wait_ssh.sh
-    ssh root@localhost 'systemctl mask remarkable-fail'
-    ssh root@localhost 'systemctl mask xochitl'
-    save_vm.sh
-EOT
 
 # Mount to presist rootfs
 VOLUME /opt/root
@@ -135,6 +129,73 @@ EXPOSE 5555/tcp
 EXPOSE 8888/tcp
 
 CMD run_vm.sh -nographic
+
+FROM qemu-base-noroot as qemu-base
+
+COPY --from=rootfs /opt/rootfs.qcow2 /opt/root
+
+# First boot, disable xochitl and reboot service, and save state
+RUN <<EOT
+    set -ex
+    run_vm.sh -serial null -daemonize
+    wait_ssh.sh
+    ssh root@localhost 'systemctl is-system-running --wait' || true
+    save_vm.sh
+EOT
+
+FROM linuxkit/guestfs:f85d370f7a3b0749063213c2dd451020e3a631ab AS sysroot
+
+COPY --from=qemu-base /opt/root/rootfs.qcow2 /opt
+
+ADD https://ipfs.eeems.website/ipfs/Qmdw66tZo2ZPRqicK4dtiUUskdHnDFZNpRAKBS5iYKKDTw /opt/install-toolchain.sh
+
+ARG checksum=1a9a5b4f9bebb6798f890ad91bdba0eddc11e8afee18d5d79e40da193e66411f
+
+RUN <<EOT
+    set -ex
+    echo "${checksum}  /opt/install-toolchain.sh" | sha256sum --check
+    export DEBIAN_FRONTEND="noninteractive"
+    apt-get update
+    apt-get install --no-install-recommends -y \
+        python3 \
+        xz-utils \
+        file \
+        rsync \
+        libguestfs-rsync
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+EOT
+
+ADD add_sysroot.sh /opt
+
+ARG toolchain
+ARG sysroot
+
+RUN <<EOT
+    set -ex
+    if qemu-img snapshot -l /opt/rootfs.qcow2 | grep main > /dev/null; then
+        qemu-img snapshot -a main /opt/rootfs.qcow2
+        qemu-img snapshot -d main /opt/rootfs.qcow2
+    fi
+    chmod +x /opt/install-toolchain.sh
+    /opt/install-toolchain.sh -y
+    /opt/add_sysroot.sh \
+        "${toolchain}/sysroots/${sysroot}" \
+        /opt/rootfs.qcow2
+EOT
+
+FROM qemu-base-noroot AS qemu-devel
+
+COPY --from=sysroot /opt/rootfs.qcow2 /opt/root
+
+RUN <<EOT
+    set -ex
+    run_vm.sh -serial null -daemonize
+    wait_ssh.sh
+    ssh root@localhost 'chmod +x .local/bin/sysfs_chroot'
+    ssh root@localhost 'systemctl is-system-running --wait' || true
+    save_vm.sh
+EOT
 
 FROM qemu-base AS qemu-toltec
 
@@ -156,6 +217,7 @@ RUN <<EOT
     export DEBIAN_FRONTEND="noninteractive"
     apt-get update
     apt-get install -y git
+    apt-get clean
     rm -rf /var/lib/apt/lists/*
 EOT
 
@@ -183,6 +245,7 @@ RUN <<EOT
     export DEBIAN_FRONTEND="noninteractive"
     apt-get update
     apt-get install -y git clang cmake ninja-build libsdl2-dev libevdev-dev
+    apt-get clean
     rm -rf /var/lib/apt/lists/*
 EOT
 
@@ -224,6 +287,7 @@ RUN <<EOT
     export DEBIAN_FRONTEND="noninteractive"
     apt-get update
     apt-get install -y libevdev2 libsdl2-2.0-0
+    apt-get clean
     rm -rf /var/lib/apt/lists/*
 EOT
 
