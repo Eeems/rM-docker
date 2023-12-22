@@ -44,7 +44,13 @@ rsync -a /usr/lib/. "\${chroot_path}/usr/lib"
 cp /etc/resolv.conf "\${chroot_path}/etc/resolv.conf"
 rsync -avh --devices --specials /run/systemd/resolve "\${chroot_path}/run/systemd"
 
-chroot "\$chroot_path" bash -l
+if ! grep -q "systemd-detect-virt --chroot" /home/root/.bashrc; then
+    echo "if systemd-detect-virt --chroot; then" >> /home/root/.bashrc
+    echo '  PS1="\${rgb_gray}`hostname` (chroot)\${rgb_usr}: \${rgb_std}\${ELIDED_PATH}/\${rgb_restore} "' >> /home/root/.bashrc
+    echo "fi" >> /home/root/.bashrc
+fi
+
+chroot "\$chroot_path" bash -c 'cd /home/root;bash -li'
 EOF
 
 cat <<EOF > "$exclude_path"
