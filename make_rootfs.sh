@@ -39,5 +39,7 @@ ln-s /dev/null /etc/systemd/system/wacom_flash.service
 ln-s /dev/null /etc/systemd/system/update-engine.service
 ln-s /dev/null /etc/systemd/system/kdump.service
 ln-s /dev/null /etc/systemd/system/usb-ether-once.service
+ln-s /dev/null /etc/systemd/system/remarkable-shutdown.service
+ln-s /dev/null /etc/systemd/system/remarkable-reboot.service
 GFS
 
