@@ -21,29 +21,30 @@ trap 'rm -f -- "$conf_path" "$log_path" "$exclude_path" "$script_path"' EXIT
 cat <<EOF > "$script_path"
 #!/bin/sh
 set -e
-cd /home/root/.local/share/sysroot
-mount -t proc /proc proc/
-mount --rbind /sys sys/
-mount --rbind /dev dev/
-mount -t tmpfs tmpfs tmp/
-mount -t tmpfs tmpfs run/
-mount -t tmpfs tmpfs var/volatile/
-mount --bind /home home/
+chroot_path="\$(mktemp -d)"
+trap 'grep "\$chroot_path" /proc/mounts | cut -d" " -f2 | xargs -r umount -ql && rmdir "\$chroot_path"' EXIT
+src_path=/home/root/.local/share/sysroot
+mount --bind "\$src_path" "\$chroot_path"
+mount -t proc /proc "\${chroot_path}/proc"
+mount --rbind /sys "\${chroot_path}/sys"
+mount --rbind /dev "\${chroot_path}/dev"
+mount -t tmpfs tmpfs "\${chroot_path}/tmp"
+mount -t tmpfs tmpfs "\${chroot_path}/run"
+mount -t tmpfs tmpfs "\${chroot_path}/var/volatile"
+mount --bind /home "\${chroot_path}/home"
 if [ -d /home/root/.entware ]; then
   mkdir -p opt
-  mount --bind /home/root/.entware opt
+  mount --bind /home/root/.entware "\${chroot_path}/opt"
 fi
 
-rsync -a /bin/. bin/
-rsync -a /lib/. lib/
-rsync -a /usr/bin/. usr/bin/
-rsync -a /usr/lib/. usr/lib/
-cp /etc/resolv.conf etc/resolv.conf
-rsync -avh --devices --specials /run/systemd/resolve run/systemd/
+rsync -a /bin/. "\${chroot_path}/bin"
+rsync -a /lib/. "\${chroot_path}/lib"
+rsync -a /usr/bin/. "\${chroot_path}/usr/bin"
+rsync -a /usr/lib/. "\${chroot_path}/usr/lib"
+cp /etc/resolv.conf "\${chroot_path}/etc/resolv.conf"
+rsync -avh --devices --specials /run/systemd/resolve "\${chroot_path}/run/systemd"
 
-chroot . bash -l
-
-grep /home/root/.local/share/sysroot /proc/mounts | cut -d' ' -f2 | xargs -r umount -l
+chroot "\$chroot_path" bash -l
 EOF
 
 cat <<EOF > "$exclude_path"
